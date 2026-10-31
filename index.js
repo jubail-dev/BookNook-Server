@@ -16,7 +16,11 @@ export async function connectToMongoDB() {
   }
 }
 
-connectToMongoDB()
+const connectClient =  await connectToMongoDB()
+const db = connectClient.db("book-nook")
+const booksCollection = db.collection("books")
+
+
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -26,6 +30,17 @@ app.use(express.json())
 
 app.get("/" , (req,res) => {
     res.send({message: "Server is Running..."})
+})
+
+app.get("/books", async(req,res) => {
+    const result = await booksCollection.find().toArray()
+    res.send(result)
+})
+
+app.post("/books", async(req,res) => {
+    const bookData = req.body
+    const result = await booksCollection.insertOne(bookData)
+    res.send(result)
 })
 
 app.listen(PORT, () => {
