@@ -1,43 +1,46 @@
-import express from "express"
-import cors from "cors"
+import express from "express";
+import cors from "cors";
 import { MongoClient, ObjectId } from 'mongodb';
-import 'dotenv/config'
+import 'dotenv/config';
 import multer from "multer";
 import cloudinary from "./cloudinary.js";
 
+// চেক করা হচ্ছে MONGODB_URI ঠিকমতো পাওয়া যাচ্ছে কিনা
+if (!process.env.MONGODB_URI) {
+  console.p("MONGODB_URI is missing in environment variables!");
+}
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
-export async function connectToMongoDB() {
+let cachedDb = null;
+
+async function connectToMongoDB() {
+  if (cachedDb) return cachedDb;
   try {
     await client.connect();
     console.log("You successfully connected to MongoDB!");
-    return client;
+    cachedDb = client.db("book-nook");
+    return cachedDb;
   } catch (err) {
-    console.dir(err);
+    console.error("MongoDB Connection Error:", err);
+    throw err;
   }
 }
 
-const connectClient =  await connectToMongoDB()
-const db = connectClient.db("book-nook")
-const booksCollection = db.collection("books")
-const bookBookingCollection = db.collection("book-bookings")
-
-
-const app = express()
+const app = express();
 
 const upload = multer({
   storage: multer.memoryStorage(),
 });
 
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5000;
 
-app.use(cors())
-app.use(express.json())
+app.use(cors());
+app.use(express.json());
 
-app.get("/" , (req,res) => {
-    res.send({message: "Server is Running..."})
-})
+app.get("/", (req, res) => {
+  res.send({ message: "Server is Running..." });
+});
 
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
@@ -68,38 +71,63 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
     res.status(500).send({
       message: "Image upload failed",
     });
   }
 });
 
-app.get("/books", async(req,res) => {
-    const result = await booksCollection.find().toArray()
-    res.send(result)
-})
+app.get("/books", async (req, res) => {
+  try {
+    const db = await connectToMongoDB();
+    const booksCollection = db.collection("books");
+    const result = await booksCollection.find().toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch books" });
+  }
+});
 
-app.post("/books", async(req,res) => {
-    const bookData = req.body
-    const result = await booksCollection.insertOne(bookData)
-    res.send(result)
-})
+app.post("/books", async (req, res) => {
+  try {
+    const db = await connectToMongoDB();
+    const booksCollection = db.collection("books");
+    const bookData = req.body;
+    const result = await booksCollection.insertOne(bookData);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to insert book" });
+  }
+});
 
-app.get("/books/:id", async(req,res) => {
-    const id = req.params.id
-    const result = await booksCollection.findOne({_id: new ObjectId(id)})
+app.get("/books/:id", async (req, res) => {
+  try {
+    const db = await connectToMongoDB();
+    const booksCollection = db.collection("books");
+    const id = req.params.id;
+    const result = await booksCollection.findOne({ _id: new ObjectId(id) });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch book" });
+  }
+});
 
-    res.send(result)
-})
+app.post("/book/booking", async (req, res) => {
+  try {
+    const db = await connectToMongoDB();
+    const bookBookingCollection = db.collection("book-bookings");
+    const bookingData = req.body;
+    const result = await bookBookingCollection.insertOne(bookingData);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to book" });
+  }
+});
 
-app.post("/book/booking", async(req,res) => {
-  const bookingData = req.body
-  const result = await bookBookingCollection.insertOne(bookingData)
-  res.send(result)
-  
-})
-
-app.listen(PORT, () => {
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
     console.log(`Server is Running on Port ${PORT}`);
-})
+  });
+}
+
+export default app;
