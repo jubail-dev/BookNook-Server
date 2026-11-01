@@ -21,7 +21,7 @@ export async function connectToMongoDB() {
 const connectClient =  await connectToMongoDB()
 const db = connectClient.db("book-nook")
 const booksCollection = db.collection("books")
-
+const bookBookingCollection = db.collection("book-bookings")
 
 
 const app = express()
@@ -91,6 +91,13 @@ app.get("/books/:id", async(req,res) => {
     const result = await booksCollection.findOne({_id: new ObjectId(id)})
 
     res.send(result)
+})
+
+app.post("/book/booking/:id", async(req,res) => {
+  const bookingData = req.body
+  const result = await bookBookingCollection.insertOne(bookingData)
+  res.send(result)
+  
 })
 
 app.listen(PORT, () => {
