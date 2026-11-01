@@ -93,7 +93,7 @@ app.get("/books/:id", async(req,res) => {
     res.send(result)
 })
 
-app.post("/book/booking/:id", async(req,res) => {
+app.post("/book/booking", async(req,res) => {
   const bookingData = req.body
   const result = await bookBookingCollection.insertOne(bookingData)
   res.send(result)
