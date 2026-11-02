@@ -127,4 +127,14 @@ app.delete("/books/:id", async(req,res) => {
   res.send(result)
 })
 
+app.delete("/book/bookings/:id", async (req, res) => {
+  const id = req.params.id;
+
+  const result = await bookBookingCollection.deleteOne({
+    _id: new ObjectId(id),
+  });
+
+  res.send(result);
+});
+
 export default app;
