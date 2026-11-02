@@ -1,10 +1,10 @@
-import express from "express"
-import cors from "cors"
-import { MongoClient, ObjectId } from 'mongodb';
-import 'dotenv/config'
+
+import express from "express";
+import cors from "cors";
+import { MongoClient, ObjectId } from "mongodb";
+import "dotenv/config";
 import multer from "multer";
 import cloudinary from "./cloudinary.js";
-
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
@@ -18,32 +18,35 @@ export async function connectToMongoDB() {
   }
 }
 
-const connectClient =  await connectToMongoDB()
-const db = connectClient.db("book-nook")
-const booksCollection = db.collection("books")
-const bookBookingCollection = db.collection("book-bookings")
+const connectClient = await connectToMongoDB();
+const db = connectClient.db("book-nook");
 
+const booksCollection = db.collection("books");
+const bookBookingCollection = db.collection("book-bookings");
+
+// Prevent duplicate borrowing by the same user
 await bookBookingCollection.createIndex(
   { bookId: 1, userEmail: 1 },
   { unique: true }
 );
 
-
-const app = express()
+const app = express();
 
 const upload = multer({
   storage: multer.memoryStorage(),
 });
 
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5000;
 
-app.use(cors())
-app.use(express.json())
+app.use(cors());
+app.use(express.json());
 
-app.get("/" , (req,res) => {
-    res.send({message: "Server is Running..."})
-})
+// Server status
+app.get("/", (req, res) => {
+  res.send({ message: "Server is Running..." });
+});
 
+// Upload image
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
@@ -80,24 +83,85 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-app.get("/books", async(req,res) => {
-    const result = await booksCollection.find().toArray()
-    res.send(result)
-})
+// Get all books
+app.get("/books", async (req, res) => {
+  try {
+    const result = await booksCollection.find().toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch books",
+    });
+  }
+});
 
-app.post("/books", async(req,res) => {
-    const bookData = req.body
-    const result = await booksCollection.insertOne(bookData)
-    res.send(result)
-})
+// Add new book
+app.post("/books", async (req, res) => {
+  try {
+    const bookData = req.body;
 
-app.get("/books/:id", async(req,res) => {
-    const id = req.params.id
-    const result = await booksCollection.findOne({_id: new ObjectId(id)})
+    // Convert totalCopies string to number
+    const totalCopies = Number(bookData.totalCopies);
 
-    res.send(result)
-})
+    if (
+      bookData.totalCopies === undefined ||
+      bookData.totalCopies === null ||
+      bookData.totalCopies === "" ||
+      !Number.isInteger(totalCopies) ||
+      totalCopies < 0
+    ) {
+      return res.status(400).send({
+        message: "Total copies must be a valid non-negative number.",
+      });
+    }
 
+    const newBook = {
+      ...bookData,
+      totalCopies,
+    };
+
+    const result = await booksCollection.insertOne(newBook);
+
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Add book error:", error);
+
+    res.status(500).send({
+      message: "Failed to add book",
+    });
+  }
+});
+
+// Get single book
+app.get("/books/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid book ID",
+      });
+    }
+
+    const result = await booksCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!result) {
+      return res.status(404).send({
+        message: "Book not found",
+      });
+    }
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch book",
+    });
+  }
+});
+
+// Borrow book
 app.post("/book/booking", async (req, res) => {
   const bookingData = req.body;
 
@@ -119,7 +183,7 @@ app.post("/book/booking", async (req, res) => {
 
   try {
     await session.withTransaction(async () => {
-      // Check if the user already borrowed this book
+      // Check existing booking
       const existingBooking = await bookBookingCollection.findOne(
         { bookId, userEmail },
         { session }
@@ -129,19 +193,48 @@ app.post("/book/booking", async (req, res) => {
         const error = new Error(
           "You have already borrowed this book."
         );
+
         error.statusCode = 409;
         throw error;
       }
 
-      // Decrease total copies by one
+      // Decrease totalCopies by one
+      // Convert old string data to number during borrowing
       const updateResult = await booksCollection.updateOne(
         {
           _id: new ObjectId(bookId),
-          totalCopies: { $gt: 0 },
+          $expr: {
+            $gt: [
+              { $convert: {
+                  input: "$totalCopies",
+                  to: "int",
+                  onError: 0,
+                  onNull: 0,
+                }
+              },
+              0,
+            ],
+          },
         },
-        {
-          $inc: { totalCopies: -1 },
-        },
+        [
+          {
+            $set: {
+              totalCopies: {
+                $subtract: [
+                  {
+                    $convert: {
+                      input: "$totalCopies",
+                      to: "int",
+                      onError: 0,
+                      onNull: 0,
+                    },
+                  },
+                  1,
+                ],
+              },
+            },
+          },
+        ],
         { session }
       );
 
@@ -149,6 +242,7 @@ app.post("/book/booking", async (req, res) => {
         const error = new Error(
           "This book is currently unavailable."
         );
+
         error.statusCode = 400;
         throw error;
       }
@@ -181,41 +275,179 @@ app.post("/book/booking", async (req, res) => {
   }
 });
 
-app.get("/book/bookings/:email", async(req,res) => {
-  const email = req.params.email
-  const result = await bookBookingCollection.find({userEmail: email}).toArray()
-  res.send(result)
-})
+// Get user's borrowed books
+app.get("/book/bookings/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
 
+    const result = await bookBookingCollection
+      .find({ userEmail: email })
+      .toArray();
 
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch bookings",
+    });
+  }
+});
 
-app.get("/my-books/:email",async(req,res)=>{
-  const email = req.params.email
-  const result = await booksCollection.find({userEmail: email}).toArray()
-  res.send(result)
-})
+// Get user's books
+app.get("/my-books/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
 
-app.patch("/books/:id", async(req,res) => {
-  const id = req.params.id
-  const updateData = req.body
-  const result = await booksCollection.updateOne({_id: new ObjectId(id)}, {$set: updateData})
-  res.send(result)
-})
+    const result = await booksCollection
+      .find({ userEmail: email })
+      .toArray();
 
-app.delete("/books/:id", async(req,res) => {
-  const id = req.params.id
-  const result = await booksCollection.deleteOne({_id: new ObjectId(id)})
-  res.send(result)
-})
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch user's books",
+    });
+  }
+});
 
+// Update book
+app.patch("/books/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const updateData = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid book ID",
+      });
+    }
+
+    // Convert totalCopies to number if provided
+    if (updateData.totalCopies !== undefined) {
+      const totalCopies = Number(updateData.totalCopies);
+
+      if (
+        updateData.totalCopies === "" ||
+        !Number.isInteger(totalCopies) ||
+        totalCopies < 0
+      ) {
+        return res.status(400).send({
+          message: "Total copies must be a valid non-negative number.",
+        });
+      }
+
+      updateData.totalCopies = totalCopies;
+    }
+
+    const result = await booksCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    res.send(result);
+  } catch (error) {
+    console.error("Update book error:", error);
+
+    res.status(500).send({
+      message: "Failed to update book",
+    });
+  }
+});
+
+// Delete book
+app.delete("/books/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid book ID",
+      });
+    }
+
+    const result = await booksCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to delete book",
+    });
+  }
+});
+
+// Return borrowed book
 app.delete("/book/bookings/:id", async (req, res) => {
-  const id = req.params.id;
+  try {
+    const id = req.params.id;
 
-  const result = await bookBookingCollection.deleteOne({
-    _id: new ObjectId(id),
-  });
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid booking ID",
+      });
+    }
 
-  res.send(result);
+    const session = client.startSession();
+
+    try {
+      let result;
+
+      await session.withTransaction(async () => {
+        const booking = await bookBookingCollection.findOne(
+          { _id: new ObjectId(id) },
+          { session }
+        );
+
+        if (!booking) {
+          const error = new Error("Booking not found");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        result = await bookBookingCollection.deleteOne(
+          { _id: new ObjectId(id) },
+          { session }
+        );
+
+        // Restore book copies
+        if (result.deletedCount === 1) {
+          await booksCollection.updateOne(
+            { _id: new ObjectId(booking.bookId) },
+            [
+              {
+                $set: {
+                  totalCopies: {
+                    $add: [
+                      {
+                        $convert: {
+                          input: "$totalCopies",
+                          to: "int",
+                          onError: 0,
+                          onNull: 0,
+                        },
+                      },
+                      1,
+                    ],
+                  },
+                },
+              },
+            ],
+            { session }
+          );
+        }
+      });
+
+      res.send(result);
+    } finally {
+      await session.endSession();
+    }
+  } catch (error) {
+    console.error("Return book error:", error);
+
+    res.status(error.statusCode || 500).send({
+      message: error.message || "Failed to return book",
+    });
+  }
 });
 
 export default app;
