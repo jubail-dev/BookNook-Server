@@ -100,6 +100,12 @@ app.post("/book/booking", async(req,res) => {
   
 })
 
+app.get("/my-book/:email",async(req,res)=>{
+  const email = req.body.email
+  const result = booksCollection.find({email: email}).toArray()
+  res.send(result)
+})
+
 app.listen(PORT, () => {
     console.log(`Server is Running on Port ${PORT}`);
 })
