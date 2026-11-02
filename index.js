@@ -106,6 +106,4 @@ app.get("/my-book/:email",async(req,res)=>{
   res.send(result)
 })
 
-app.listen(PORT, () => {
-    console.log(`Server is Running on Port ${PORT}`);
-})
+export default app;
