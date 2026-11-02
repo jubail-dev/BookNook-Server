@@ -102,7 +102,8 @@ app.post("/book/booking", async(req,res) => {
 
 app.get("/my-book/:email",async(req,res)=>{
   const email = req.params.email
-  const result = booksCollection.find({userEmail: email}).toArray()
+
+  const result = await booksCollection.find({userEmail: email}).toArray()
   res.send(result)
 })
 
