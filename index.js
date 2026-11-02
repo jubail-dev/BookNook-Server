@@ -100,10 +100,16 @@ app.post("/book/booking", async(req,res) => {
   
 })
 
-app.get("/my-book/:email",async(req,res)=>{
+app.get("/my-books/:email",async(req,res)=>{
   const email = req.params.email
-
   const result = await booksCollection.find({userEmail: email}).toArray()
+  res.send(result)
+})
+
+app.patch("/books/:id", async(req,res) => {
+  const id = req.params.id
+  const updateData = req.body
+  const result = await booksCollection.updateOne({_id: new ObjectId(id)}, {$set: updateData})
   res.send(result)
 })
 
