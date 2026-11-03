@@ -5,6 +5,7 @@ import { MongoClient, ObjectId } from "mongodb";
 import "dotenv/config";
 import multer from "multer";
 import cloudinary from "./cloudinary.js";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
@@ -40,6 +41,33 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+const verifyToken = async(req, res, next) => {
+  const authHeaders = req.headers.authorization;
+
+  if(!authHeaders){
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  const token = authHeaders.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_SIDE_URL}/api/auth/jwks`))
+  
+  try{
+    const {payload} = await jwtVerify(token,JWKS)
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+
+  
+}
 
 // Server status
 app.get("/", (req, res) => {
@@ -133,7 +161,7 @@ app.post("/books", async (req, res) => {
 });
 
 // Get single book
-app.get("/books/:id", async (req, res) => {
+app.get("/books/:id", verifyToken, async (req, res) => {
   try {
     const id = req.params.id;
 
@@ -448,6 +476,10 @@ app.delete("/book/bookings/:id", async (req, res) => {
       message: error.message || "Failed to return book",
     });
   }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
 export default app;
