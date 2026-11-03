@@ -42,40 +42,48 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-const verifyToken = async(req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authHeaders = req.headers.authorization;
 
-  if(!authHeaders){
-    return res.status(401).send({ message: "Unauthorized access" });
+  if (!authHeaders) {
+    return res.status(401).send({
+      message: "Unauthorized access",
+    });
   }
 
   const token = authHeaders.split(" ")[1];
 
   if (!token) {
-    return res.status(401).send({ message: "Unauthorized access" });
+    return res.status(401).send({
+      message: "Unauthorized access",
+    });
   }
 
-  const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_SIDE_URL}/api/auth/jwks`))
-  
-  try{
-    const {payload} = await jwtVerify(token,JWKS)
+  const JWKS = createRemoteJWKSet(
+    new URL(`${process.env.CLIENT_SIDE_URL}/api/auth/jwks`)
+  );
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
     next();
   } catch (error) {
     console.error("Token verification error:", error);
-    return res.status(401).send({ message: "Unauthorized access" });
+
+    return res.status(401).send({
+      message: "Unauthorized access",
+    });
   }
-
-
-  
-}
+};
 
 // Server status
 app.get("/", (req, res) => {
-  res.send({ message: "Server is Running..." });
+  res.send({
+    message: "Server is Running...",
+  });
 });
 
-// Upload image
-app.post("/upload", upload.single("image"), async (req, res) => {
+// Upload image - JWT Protected
+app.post("/upload", verifyToken, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).send({
@@ -111,7 +119,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-// Get all books
+// Get all books - Public
 app.get("/books", async (req, res) => {
   try {
     const result = await booksCollection.find().toArray();
@@ -123,8 +131,8 @@ app.get("/books", async (req, res) => {
   }
 });
 
-// Add new book
-app.post("/books",verifyToken, async (req, res) => {
+// Add new book - JWT Protected
+app.post("/books", verifyToken, async (req, res) => {
   try {
     const bookData = req.body;
 
@@ -160,8 +168,8 @@ app.post("/books",verifyToken, async (req, res) => {
   }
 });
 
-// Get single book
-app.get("/books/:id", verifyToken, async (req, res) => {
+// Get single book - Public
+app.get("/books/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
@@ -189,8 +197,8 @@ app.get("/books/:id", verifyToken, async (req, res) => {
   }
 });
 
-// Borrow book
-app.post("/book/booking", async (req, res) => {
+// Borrow book - JWT Protected
+app.post("/book/booking", verifyToken, async (req, res) => {
   const bookingData = req.body;
 
   const { bookId, userEmail, userName } = bookingData;
@@ -233,12 +241,13 @@ app.post("/book/booking", async (req, res) => {
           _id: new ObjectId(bookId),
           $expr: {
             $gt: [
-              { $convert: {
+              {
+                $convert: {
                   input: "$totalCopies",
                   to: "int",
                   onError: 0,
                   onNull: 0,
-                }
+                },
               },
               0,
             ],
@@ -303,8 +312,8 @@ app.post("/book/booking", async (req, res) => {
   }
 });
 
-// Get user's borrowed books
-app.get("/book/bookings/:email", async (req, res) => {
+// Get user's borrowed books - JWT Protected
+app.get("/book/bookings/:email", verifyToken, async (req, res) => {
   try {
     const email = req.params.email;
 
@@ -320,8 +329,8 @@ app.get("/book/bookings/:email", async (req, res) => {
   }
 });
 
-// Get user's books
-app.get("/my-books/:email", async (req, res) => {
+// Get user's books - JWT Protected
+app.get("/my-books/:email", verifyToken, async (req, res) => {
   try {
     const email = req.params.email;
 
@@ -337,8 +346,8 @@ app.get("/my-books/:email", async (req, res) => {
   }
 });
 
-// Update book
-app.patch("/books/:id", async (req, res) => {
+// Update book - JWT Protected
+app.patch("/books/:id", verifyToken, async (req, res) => {
   try {
     const id = req.params.id;
     const updateData = req.body;
@@ -381,8 +390,8 @@ app.patch("/books/:id", async (req, res) => {
   }
 });
 
-// Delete book
-app.delete("/books/:id", async (req, res) => {
+// Delete book - JWT Protected
+app.delete("/books/:id", verifyToken, async (req, res) => {
   try {
     const id = req.params.id;
 
@@ -404,8 +413,8 @@ app.delete("/books/:id", async (req, res) => {
   }
 });
 
-// Return borrowed book
-app.delete("/book/bookings/:id", async (req, res) => {
+// Return borrowed book - JWT Protected
+app.delete("/book/bookings/:id", verifyToken, async (req, res) => {
   try {
     const id = req.params.id;
 
@@ -476,10 +485,6 @@ app.delete("/book/bookings/:id", async (req, res) => {
       message: error.message || "Failed to return book",
     });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
 });
 
 export default app;
