@@ -124,7 +124,7 @@ app.get("/books", async (req, res) => {
 });
 
 // Add new book
-app.post("/books", async (req, res) => {
+app.post("/books",verifyToken, async (req, res) => {
   try {
     const bookData = req.body;
 
