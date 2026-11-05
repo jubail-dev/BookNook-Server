@@ -152,9 +152,10 @@ app.post("/books", verifyToken, async (req, res) => {
     }
 
     const newBook = {
-      ...bookData,
-      totalCopies,
-    };
+  ...bookData,
+  totalCopies,
+  addedAt: new Date(),
+};
 
     const result = await booksCollection.insertOne(newBook);
 
