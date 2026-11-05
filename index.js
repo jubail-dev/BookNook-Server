@@ -129,6 +129,24 @@ app.get("/books", async (req, res) => {
     });
   }
 });
+// Get latest 6 books - Public
+app.get("/books/new-arrivals", async (req, res) => {
+  try {
+    const result = await booksCollection
+      .find()
+      .sort({ _id: -1 })
+      .limit(6)
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    console.error("New arrivals fetch error:", error);
+
+    res.status(500).send({
+      message: "Failed to fetch new arrivals",
+    });
+  }
+});
 
 // Add new book - JWT Protected
 app.post("/books", verifyToken, async (req, res) => {
