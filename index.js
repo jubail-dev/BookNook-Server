@@ -1,4 +1,3 @@
-
 import express from "express";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
@@ -152,10 +151,9 @@ app.post("/books", verifyToken, async (req, res) => {
     }
 
     const newBook = {
-  ...bookData,
-  totalCopies,
-  addedAt: new Date(),
-};
+      ...bookData,
+      totalCopies,
+    };
 
     const result = await booksCollection.insertOne(newBook);
 
